@@ -39,15 +39,17 @@ def makeParser():
                         help='Path to the parent data directory. BIDS compatible datasets are encouraged.')
     parser.add_argument('-sid','--subject_id', nargs=1, required=True,
                         help='Subject ID used to indicate which patient to preprocess')
-    parser.add_argument('-spath','--subject_t1_path', nargs=1, required=False,
-                        help='Path to a subjects T1 scan. This is not necessary if subject ID is provided as the T1 will be automatically found using the T1w.nii.gz extension')
+    # parser.add_argument('-spath','--subject_t1_path', nargs=1, required=False,
+    #                     help='Path to a subjects BOLD scan. This is not necessary if subject ID is provided')
     parser.add_argument('-ses_id','--session_id', nargs=1, required=False,
                         help='Session ID used to indicate which session to look for the patient to preprocess')
     parser.add_argument('-tem','--template', nargs=1, required=False,
-                        help='Template to be used to register into patient space. Default is MNI152lin_T1_2mm_brain.nii.gz')
+                        help='Template to be used to register into patient space. Default is MNI152lin_T1_4mm_brain.nii.gz')
     parser.add_argument('-seg','--segment', nargs=1, required=False,
-                        help='Atlas to be used to identify brain regions in patient space. This is used in conjunction with the template. Please ensure that the atlas is in the same space as the template. Default is the AALv3 template.')
-    parser.add_argument('-o','--ourDir', nargs=1, required=True,
+                        help='Atlas to be used to identify brain regions in patient space. This is used in conjunction with the template. Please ensure that the atlas is in the same space as the template. Default is the AALv2 template.')
+    # parser.add_argument('-sched','--scheduleTxt', nargs=1, required=False,
+    #                     help='File needed as input to calculate best frame. Default is in Template directory')
+    parser.add_argument('-o','--outDir', nargs=1, required=True,
                         help='Path to the \'derivatives\' folder or chosen out folder. All results will be submitted to outDir/out/str_preproc/subject_id/...')
     parser.add_argument('--saveIntermediates', required=False, action='store_true',
                         help='Saves all intermediate files while pipeline is running.')
@@ -56,6 +58,7 @@ def makeParser():
 
     return parser 
 
+
 # This was developed instead of using the default parameter in the argparser
 # bc argparser only returns a list or None and you can't do None[0]. 
 # Not all variables need a default but need to be inspected whether they are None
@@ -63,24 +66,25 @@ def vetArgNone(variable, default):
     if variable==None:
         return default
     else:
-        return variable[0]
+        return os.path.abspath(os.path.expanduser(variable[0]))
 
-def makeOutDir(outDirName, args, enforceBIDS=True):
-    outDir = ''
-    if os.path.basename(args.ourDir[0]) == 'derivatives':
-        outDir = os.path.join(args.ourDir[0], outDirName, args.subject_id[0])
-    elif args.ourDir[0] == args.parentDir[0]:
-        print("Your outdir is the same as your parent dir!")
-        print("Making a derivatives folder for you...")
-        outDir = os.path.join(args.ourDir[0], 'derivatives', outDirName, args.subject_id[0])
-    elif os.path.basename(args.ourDir[0]) == args.subject_id[0]:
-        print('The given out directory seems to be at a patient level rather than parent level')
-        print('It is hard to determine if your out directory is BIDS compliant')
-    elif 'derivatives' in args.ourDir[0]:
-        outDir = os.path.join(args.ourDir[0], outDirName, args.subject_id[0])
+def makeOutDir(outDirName, args, enforceBIDS=True, filename=None):
+
+    outDirPath_parents = args.outDir[0]
+    if '~' in outDirPath_parents:
+        outDirPath_parents = os.path.expanduser(outDirPath_parents)
+
+    outDirPath_parents = os.path.abspath(outDirPath_parents)
+
+    if filename == None:
+        outDir = os.path.join(outDirPath_parents, outDirName, args.subject_id[0], DATATYPE_SUBJECT_DIR)
+    else:
+        outDir = os.path.join(outDirPath_parents, outDirName, args.subject_id[0], DATATYPE_SUBJECT_DIR, filename) #accounts for multiple runs/tasks
 
     if not os.path.exists(outDir):
         os.makedirs(outDir, exist_ok=True)
+
+    print("Outputting results to path: {}".format(outDir))
 
     return outDir
 
@@ -107,7 +111,7 @@ def getMaxROI(atlas_path):
 
 
 # Note: This function helps to determine the best volume to use as a reference for motion correction.
-def findBestReference(in_file, scheduleTXT, derivatives_dir):
+def findBestReference(in_file, scheduleTXT, derivatives_dir, testmode = False):
     import nibabel as nib
     import numpy as np
     from tqdm import tqdm
@@ -115,6 +119,9 @@ def findBestReference(in_file, scheduleTXT, derivatives_dir):
     import json
     sys.path.append('/data/')
     import pipeline_functions as pf
+
+    if testmode:
+        return 0, ''
 
     entryname = os.path.basename(in_file)
     file_name = "best_frames.json"
@@ -348,6 +355,7 @@ def ArtifactExtraction(split_images, dvars_outliers, fd_outliers):
     reject_dict['Number of frames removed by DVARS'] = int(len(dvars_rejects))
     reject_dict['Frames rejected by FD'] = [int(x) for x in set(fd_rejects)]
     reject_dict['Frames rejected by DVARS'] = [int(x) for x in set(dvars_rejects)]
+    reject_dict['Number of frames retained'] = int(len(split_copy)) - int(len(all_rejects))
 
     rejectionsFile = os.path.join(os.getcwd(),'rejections.json')
     with open(rejectionsFile, 'w') as r:
@@ -505,17 +513,17 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
 
     #the input node, which takes the input image from infosource and feeds it into the rest of the pipeline
     input_node = pe.Node(interface=util.IdentityInterface(fields=['func']),name='input')
-    input_node.inputs.func = patient_func_path
+    input_node.inputs.func = patient_func_path    
 
 
     #the datasink node stores the outputs of all operations
     datasink = pe.Node(nio.DataSink(parameterization=False), name='sinker')
     datasink.inputs.base_directory = outDir
+    DATASINK_PREFIX = os.path.basename(patient_func_path).split('.')[0] # filename to prevent collisions from multiple runs
 
 
     reorient2std_node = pe.Node(interface=fsl.Reorient2Std(), name='reorient2std')
     preproc.connect(input_node, 'func', reorient2std_node, 'in_file')
-    preproc.connect(reorient2std_node, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@reorient')
 
 
     #this node accesses the calculate_sigma function to take the input image and output its sigma value
@@ -535,9 +543,10 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
     segment_feed.inputs.segment = segment_path
 
     # # finds the best frame to use as a reference
-    bestRef_node = pe.Node(interface=util.Function(input_names=['in_file', 'scheduleTXT', 'derivatives_dir'], output_names=['bestReference', 'bestFramesFile'], function=findBestReference), name='findBestReference')
+    bestRef_node = pe.Node(interface=util.Function(input_names=['in_file', 'scheduleTXT', 'derivatives_dir', 'testmode'], output_names=['bestReference', 'bestFramesFile'], function=findBestReference), name='findBestReference')
     bestRef_node.inputs.scheduleTXT = scheduleTXT
-    bestRef_node.inputs.derivatives_dir = os.path.join(datasink.inputs.base_directory, DATATYPE_SUBJECT_DIR)
+    bestRef_node.inputs.derivatives_dir = os.path.join(datasink.inputs.base_directory, DATASINK_PREFIX)
+    bestRef_node.inputs.testmode = testmode
     preproc.connect(input_node, 'func', bestRef_node, 'in_file')
 
     #the MCFLIRT node motion corrects the image
@@ -669,7 +678,6 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
     rename_node.inputs.keep_ext = True
     rename_node.inputs.format_string = 'final_preprocessed_output'
     preproc.connect(merge, 'merged_file',rename_node, 'in_file')
-    preproc.connect(rename_node, 'out_file',datasink, DATATYPE_SUBJECT_DIR+'.@final_out')
 
     GetMaxROI_node = pe.Node(interface=util.Function(input_names=['atlas_path'], output_names=['max_roi'], function=getMaxROI), name='GetMaxROI')
     preproc.connect(segment_feed, 'segment', GetMaxROI_node, 'atlas_path')
@@ -682,41 +690,41 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
     
 
     # Should always be outputted
-    preproc.connect(bestRef_node, 'bestFramesFile', datasink, '{}.@bestFramesFile'.format(DATATYPE_SUBJECT_DIR))
-    preproc.connect(antsReg, 'warped_image', datasink, '{}.@warpedTemplate'.format(DATATYPE_SUBJECT_DIR))
-    preproc.connect(antsAppTrfm, 'output_image', datasink, '{}.@warpedAtlas'.format(DATATYPE_SUBJECT_DIR))
-    preproc.connect(CalcSimMatrix_node, 'avg_arr_file', datasink, DATATYPE_SUBJECT_DIR+'.@avgBoldSigPerRegion')
-    preproc.connect(CalcSimMatrix_node, 'sim_matrix_file', datasink, DATATYPE_SUBJECT_DIR+'.@similarityMatrix')
-    preproc.connect(plotmotionmetrics_node, 'outfile_path', datasink, DATATYPE_SUBJECT_DIR+'.@fdvsdvars_plot')
+    preproc.connect(reorient2std_node, 'out_file', datasink, '{}.@reorient'.format(DATASINK_PREFIX))
+    preproc.connect(apply_bet, 'out_file', datasink, DATASINK_PREFIX+'.@applybe_out')
+    preproc.connect(bestRef_node, 'bestFramesFile', datasink, '{}.@bestFramesFile'.format(DATASINK_PREFIX))
+    preproc.connect(antsReg, 'warped_image', datasink, '{}.@warpedTemplate'.format(DATASINK_PREFIX))
+    preproc.connect(antsAppTrfm, 'output_image', datasink, '{}.@warpedAtlas'.format(DATASINK_PREFIX))
+    preproc.connect(CalcSimMatrix_node, 'avg_arr_file', datasink, DATASINK_PREFIX+'.@avgBoldSigPerRegion')
+    preproc.connect(CalcSimMatrix_node, 'sim_matrix_file', datasink, DATASINK_PREFIX+'.@similarityMatrix')
+    preproc.connect(plotmotionmetrics_node, 'outfile_path', datasink, DATASINK_PREFIX+'.@fdvsdvars_plot')
+    preproc.connect(rename_node, 'out_file',datasink, DATASINK_PREFIX+'.@final_out')
+    preproc.connect(artifact_extract, 'rejectionsFile', datasink, DATASINK_PREFIX+'.@rejects_summ')
 
 
 
     # # ******************************************************************************
     # # IF MEMORY IS PLENTIFUL, THEN SAVE EVERYTHING
     if(saveIntermediates):
-        preproc.connect(segment_feed, 'segment', datasink, DATATYPE_SUBJECT_DIR+'.@OGSeg')
-        preproc.connect(motion_correct, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@mcf_out')
-        preproc.connect(motion_correct, 'par_file', datasink, DATATYPE_SUBJECT_DIR+'.@mcf_par')
-        preproc.connect(motion_correct, 'rms_files', datasink, DATATYPE_SUBJECT_DIR+'.@mcf_rms')
-        preproc.connect(brain_extract, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@be_out')
-        preproc.connect(apply_bet, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@applybe_out')
-        preproc.connect(normalization_node, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@normalization')
-        preproc.connect(artifact, 'outlier_files', datasink, DATATYPE_SUBJECT_DIR+'.@artdet_outs')
-        preproc.connect(calcOutliers, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@calcFDOuts_outs')
-        preproc.connect(artifact_extract, 'rejectionsFile', datasink, DATATYPE_SUBJECT_DIR+'.@rejects_summ')
-        preproc.connect(merge, 'merged_file', datasink, DATATYPE_SUBJECT_DIR+'.@merge_out')
-        preproc.connect(bias_correct, 'bias_field', datasink, DATATYPE_SUBJECT_DIR+'.@bias')
-        preproc.connect(regressNode, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@residual_out')
-        preproc.connect(apply_bias, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@appbias_out')
-        preproc.connect(band_pass, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@bandpass_out')
-        preproc.connect(smooth, 'smoothed_file', datasink, DATATYPE_SUBJECT_DIR+'.@smooth_out')
-        preproc.connect(antsAppTrfm, 'out_file', datasink, DATATYPE_SUBJECT_DIR+'.@app_nlin_out')
-        preproc.connect(fdnode, 'outfile', datasink, DATATYPE_SUBJECT_DIR+'.@fd_out')
-        preproc.connect(fdnode, 'outmetric', datasink, DATATYPE_SUBJECT_DIR+'.@fd_metrics')
-        preproc.connect(dvarsnode, 'outfile', datasink, DATATYPE_SUBJECT_DIR+'.@dvars_out')
-        preproc.connect(dvarsnode, 'outmetric', datasink, DATATYPE_SUBJECT_DIR+'.@dvars_metrics')
-        preproc.connect(dvarsnode, 'outplot_path', datasink, DATATYPE_SUBJECT_DIR+'.@dvars_plot')
-        preproc.connect(CalcSimMatrix_node, 'mapping_dict_file', datasink, DATATYPE_SUBJECT_DIR+'.@MappingDict')
+        preproc.connect(segment_feed, 'segment', datasink, DATASINK_PREFIX+'.@OGSeg')
+        preproc.connect(motion_correct, 'out_file', datasink, DATASINK_PREFIX+'.@mcf_out')
+        preproc.connect(motion_correct, 'par_file', datasink, DATASINK_PREFIX+'.@mcf_par')
+        preproc.connect(motion_correct, 'rms_files', datasink, DATASINK_PREFIX+'.@mcf_rms')
+        preproc.connect(brain_extract, 'out_file', datasink, DATASINK_PREFIX+'.@be_out')
+        preproc.connect(normalization_node, 'out_file', datasink, DATASINK_PREFIX+'.@normalization')
+        preproc.connect(merge, 'merged_file', datasink, DATASINK_PREFIX+'.@merge_out')
+        preproc.connect(bias_correct, 'bias_field', datasink, DATASINK_PREFIX+'.@bias')
+        preproc.connect(regressNode, 'out_file', datasink, DATASINK_PREFIX+'.@residual_out')
+        preproc.connect(apply_bias, 'out_file', datasink, DATASINK_PREFIX+'.@appbias_out')
+        preproc.connect(band_pass, 'out_file', datasink, DATASINK_PREFIX+'.@bandpass_out')
+        preproc.connect(smooth, 'smoothed_file', datasink, DATASINK_PREFIX+'.@smooth_out')
+        preproc.connect(antsAppTrfm, 'out_file', datasink, DATASINK_PREFIX+'.@app_nlin_out')
+        preproc.connect(fdnode, 'outfile', datasink, DATASINK_PREFIX+'.@fd_out')
+        preproc.connect(fdnode, 'outmetric', datasink, DATASINK_PREFIX+'.@fd_metrics')
+        preproc.connect(dvarsnode, 'outfile', datasink, DATASINK_PREFIX+'.@dvars_out')
+        preproc.connect(dvarsnode, 'outmetric', datasink, DATASINK_PREFIX+'.@dvars_metrics')
+        preproc.connect(dvarsnode, 'outplot_path', datasink, DATASINK_PREFIX+'.@dvars_plot')
+        preproc.connect(CalcSimMatrix_node, 'mapping_dict_file', datasink, DATASINK_PREFIX+'.@MappingDict')
     # # ******************************************************************************
 
     return preproc
@@ -728,43 +736,47 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
 def main():
     parser = makeParser()
     args   = parser.parse_args()
-    data_dir      = args.parentDir[0]
+    data_dir      = os.path.abspath(os.path.expanduser(args.parentDir[0]))
     outDir        = ''
     outDirName    = 'Sim_Funky_Pipeline'
     session       = vetArgNone(args.session_id, None)
-    template_path = vetArgNone(args.template, '/app/Template/MNI152lin_T1_2mm_brain.nii.gz') #path in docker container
-    segment_path  = vetArgNone(args.segment, '/app/Template/AAL3v1_CombinedThalami.nii.gz') #path in docker container
+    template_path = vetArgNone(args.template, '/app/Template/MNI152lin_T1_4mm_brain.nii.gz') #path in docker container
+    segment_path  = vetArgNone(args.segment, '/app/Template/aal2.nii.gz') #path in docker container
     enforceBIDS   = True
-    outDir        = makeOutDir(outDirName, args, enforceBIDS)
 
     if args.testmode:
         print("!!YOU ARE USING TEST MODE!!")
 
-    for i in os.listdir(args.parentDir[0]):
-        if i[:3] == 'ses':
+    for i in os.listdir(os.path.join(data_dir, args.subject_id[0])):
+        if 'ses-' in i:
             if session == None:
                 raise Exception("Your data is sorted into sessions but you did not indicate a session to process. Please provide the Session.")
 
     if session != None:
-        patient_func_dir = os.path.join(args.parentDir[0], session, args.subject_id[0], DATATYPE_SUBJECT_DIR)
+        patient_func_dir = os.path.join(data_dir, args.subject_id[0], args.session_id[0], DATATYPE_SUBJECT_DIR)
     else:
-        patient_func_dir = os.path.join(args.parentDir[0], args.subject_id[0], DATATYPE_SUBJECT_DIR)
+        patient_func_dir = os.path.join(data_dir, args.subject_id[0], DATATYPE_SUBJECT_DIR)
 
-    ## The following behavior only takes the first T1 seen in the directory. 
-    ## The code could be expanded to account for multiple runs
-    patient_func_path = None
+
+    patient_func_paths = []
     for i in os.listdir(patient_func_dir):
         if i[-11:] =='{}.nii.gz'.format(DATATYPE_FILE_SUFFIX):
-            patient_func_path = os.path.join(patient_func_dir, i)
+            patient_func_paths.append(os.path.join(patient_func_dir, i))
+        elif i[-8:] == '{}.nii'.format(DATATYPE_FILE_SUFFIX):
+            patient_func_paths.append(os.path.join(patient_func_dir, i))
 
-    if patient_func_path == None:
-        print('Error: No {} images found for the specified patient. The pipeline cannot proceed. Please ensure that all filenames adhere to the BIDS standard. No NIFTI files with the extension \'_{}.nii.gz\' were detected. Exiting...'.format(DATATYPE_FILE_SUFFIX.upper(), DATATYPE_FILE_SUFFIX))
+    if len(patient_func_paths) == 0:
+        print('Error: No {} images found for the specified patient. The pipeline cannot proceed. Please ensure that all filenames adhere to the BIDS standard. No NIFTI files with the extension \'_{}.nii[.gz]\' were detected. Exiting...'.format(DATATYPE_FILE_SUFFIX.upper(), DATATYPE_FILE_SUFFIX))
     else:
-        preproc = buildWorkflow(patient_func_path, template_path, segment_path, outDir, args.subject_id[0], args.testmode, args.saveIntermediates)
-        tic = time.time()
-        preproc.run()
-        toc = time.time()
-        print('\nElapsed Time to Preprocess: {}s\n'.format(tic-toc))
+        for bold_path in patient_func_paths:
+            filename_noext = os.path.basename(bold_path).split('.')[0]
+            outDir = makeOutDir(outDirName, args, enforceBIDS)
+            preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], args.testmode, args.saveIntermediates)
+            # preproc.write_graph(graph2use='exec', format='svg')
+            tic = time.time()
+            preproc.run()
+            toc = time.time()
+            print('\nElapsed Time to Preprocess: {}s\n'.format(tic-toc))
 
 
 
