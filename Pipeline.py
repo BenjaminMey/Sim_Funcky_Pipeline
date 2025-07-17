@@ -47,8 +47,8 @@ def makeParser():
                         help='Template to be used to register into patient space. Default is MNI152lin_T1_4mm_brain.nii.gz')
     parser.add_argument('-seg','--segment', nargs=1, required=False,
                         help='Atlas to be used to identify brain regions in patient space. This is used in conjunction with the template. Please ensure that the atlas is in the same space as the template. Default is the aal2 template.')
-    # parser.add_argument('-sched','--scheduleTxt', nargs=1, required=False,
-    #                     help='File needed as input to calculate best frame. Default is in Template directory')
+    parser.add_argument('-sched','--scheduleTxt', nargs=1, required=False,
+                         help='File needed as input to calculate best frame. Default is in Template directory')
     parser.add_argument('-o','--outDir', nargs=1, required=True,
                         help='Path to the \'derivatives\' folder or chosen out folder. All results will be submitted to outDir/out/str_preproc/subject_id/...')
     parser.add_argument('--saveIntermediates', required=False, action='store_true',
