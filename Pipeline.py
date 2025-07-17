@@ -530,7 +530,7 @@ def plotMotionMetrics(fd_metrics_file, dvars_metrics_file):
 def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjectID, scheduleTXT, testmode=False, saveIntermediates=False, patient_anat_path=None):
     #creates a pipeline
     preproc = pe.Workflow(name='preproc')
-
+    preproc.base_dir = os.getcwd()
 
     #the input node, which takes the input image from infosource and feeds it into the rest of the pipeline
     if patient_anat_path is None:
