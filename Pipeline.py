@@ -550,6 +550,7 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
 
         anat_apply_bet_node = pe.Node(interface=fsl.BinaryMaths(operation='mul'), name='anat_apply_bet')
         preproc.connect(anat_brain_extract_node, 'mask_file', anat_apply_bet_node, 'operand_file')
+        preproc.connect(input_node, 'anat', anat_apply_bet_node, 'in_file')
     input_node.inputs.func = patient_func_path    
 
 
@@ -856,7 +857,7 @@ def main():
                 preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], scheduleTXT, args.testmode, args.saveIntermediates)
             else:
                 template_path = vetArgNone(args.template,
-                                           '/app/Template/MNI152_T1_1mm.nii.gz')  # path in docker container
+                                           '/app/Template/MNI152_T1_1mm_brain.nii.gz')  # path in docker container
                 segment_path = vetArgNone(args.segment, '/app/Template/AAL3v1_1mm.nii.gz')  # path in docker container
                 preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], scheduleTXT,
                                         args.testmode, args.saveIntermediates, patient_anat_path=patient_anat_paths[0])
