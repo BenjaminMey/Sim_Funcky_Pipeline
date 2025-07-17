@@ -719,15 +719,15 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
         setRegParams(func2anatReg, testmode)
         func2anatReg.inputs.write_composite_transform = True
         func2anatReg.inputs.output_warped_image = 'func2anatReg_output_warped_image.nii.gz'
-        preproc.connect(input_node, 'anat', func2anatReg, 'fixed_image')
-        preproc.connect(fslroi_node_2, 'roi_file', func2anatReg, 'moving_image')
+        preproc.connect(anat_apply_bet_node, 'out_file', func2anatReg, 'fixed_image')
+        preproc.connect(fslroi_node, 'roi_file', func2anatReg, 'moving_image')
 
         anat2tempReg = pe.Node(interface=ants.Registration(), name='anat2tempReg')
         setRegParams(anat2tempReg, testmode)
         anat2tempReg.inputs.write_composite_transform = True
         anat2tempReg.inputs.output_warped_image = 'anat2tempReg_output_warped_image.nii.gz'
         preproc.connect(template_feed, 'template', anat2tempReg, 'fixed_image')
-        preproc.connect(input_node, 'anat', anat2tempReg, 'moving_image')
+        preproc.connect(anat_apply_bet_node, 'out_file', anat2tempReg, 'moving_image')
 
         temp2func_xfm_merge_node = pe.Node(interface=util.Merge(2), name='xfm_merge')
         preproc.connect(func2anatReg, 'inverse_composite_transform', temp2func_xfm_merge_node, 'in1')
