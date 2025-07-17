@@ -703,6 +703,9 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
     antsAppTrfm.inputs.interpolation = 'NearestNeighbor'
     antsAppTrfm.inputs.default_value = 0
 
+    preproc.connect(segment_feed, 'segment', antsAppTrfm, 'input_image')
+    preproc.connect(fslroi_node, 'roi_file', antsAppTrfm, 'reference_image')
+
     if patient_anat_path is None:
         antsReg = pe.Node(interface=ants.Registration(), name='antsRegistration')
         setRegParams(antsReg, testmode)
@@ -711,8 +714,6 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
         preproc.connect(template_feed, 'template', antsReg, 'moving_image')
         preproc.connect(fslroi_node, 'roi_file', antsReg, 'fixed_image')
 
-        preproc.connect(segment_feed, 'segment', antsAppTrfm, 'input_image')
-        preproc.connect(fslroi_node, 'roi_file', antsAppTrfm, 'reference_image')
         preproc.connect(antsReg, 'reverse_forward_transforms', antsAppTrfm, 'transforms')
         preproc.connect(antsReg, 'reverse_forward_invert_flags', antsAppTrfm, 'invert_transform_flags')
     else:
