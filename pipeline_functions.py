@@ -6,7 +6,12 @@ import nipype.interfaces.fsl as fsl  # fsl
 
 # Note: takes in the paths to the template and bold images and outputs the
 # array of average intensity values for each brain region
-def make_average_arr(bold_path, template_path, maxSegVal):
+def make_stat_arr(bold_path, template_path, maxSegVal, stat='average'):
+    if stat == 'average':
+        operation = np.average
+    elif stat == 'std':
+        operation = np.std
+
     bold = nib.load(bold_path)
     template = nib.load(template_path)
     bold_array = bold.get_fdata()
@@ -23,7 +28,7 @@ def make_average_arr(bold_path, template_path, maxSegVal):
                 continue
             template_indices = template_array == s
             matrix = bold_time[template_indices]
-            res = np.average(matrix)
+            res = operation(matrix)
             avg_arr[t,s-1] = res
     # avg_arr = np.nan_to_num(avg_arr) #redundant but do just incase
     return avg_arr

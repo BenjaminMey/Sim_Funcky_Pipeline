@@ -46,7 +46,7 @@ def makeParser():
     parser.add_argument('-tem','--template', nargs=1, required=False,
                         help='Template to be used to register into patient space. Default is MNI152lin_T1_4mm_brain.nii.gz')
     parser.add_argument('-seg','--segment', nargs=1, required=False,
-                        help='Atlas to be used to identify brain regions in patient space. This is used in conjunction with the template. Please ensure that the atlas is in the same space as the template. Default is the AALv2 template.')
+                        help='Atlas to be used to identify brain regions in patient space. This is used in conjunction with the template. Please ensure that the atlas is in the same space as the template. Default is the aal2 template.')
     # parser.add_argument('-sched','--scheduleTxt', nargs=1, required=False,
     #                     help='File needed as input to calculate best frame. Default is in Template directory')
     parser.add_argument('-o','--outDir', nargs=1, required=True,
@@ -383,7 +383,7 @@ def CalcSimMatrix (bold_path, template_path, maxSegVal):
     
     
     #runs the data extraction functions
-    avg_arr = pf.make_average_arr(bold_path,template_path, maxSegVal)
+    avg_arr = pf.make_stat_arr(bold_path,template_path, maxSegVal, stat='average')
     sim_matrix = pf.build_sim_arr(avg_arr)
     
     #saves the extracted data files
@@ -401,6 +401,27 @@ def CalcSimMatrix (bold_path, template_path, maxSegVal):
     
     #returns the files
     return avg_matrix_file, sim_matrix_file, mapping_dict_file
+
+def CalcTSNR(bold_path, template_path, maxSegVal):
+    import os
+    import sys
+    import numpy as np
+    import json
+    sys.path.append('/data/')
+    import pipeline_functions as pf
+
+    avg_arr = pf.make_stat_arr(bold_path, template_path, maxSegVal, stat='average')
+    std_arr = pf.make_stat_arr(bold_path, template_path, maxSegVal, stat='std')
+    tsnr_arr = np.divide(avg_arr, std_arr)
+
+    avg_matrix_file = os.path.join(os.getcwd(),'average_arr.csv')
+    std_matrix_file = os.path.join(os.getcwd(), 'std_arr.csv')
+    tsnr_matrix_file = os.path.join(os.getcwd(), 'tsnr.csv')
+    np.savetxt(avg_matrix_file, avg_arr, delimiter=',')
+    np.savetxt(std_matrix_file, std_arr, delimiter=',')
+    np.savetxt(tsnr_matrix_file, tsnr_arr, delimiter=',')
+
+    return avg_matrix_file, std_matrix_file, tsnr_matrix_file
 
 # Note: This function expands the original 6 motion parameters to 24 (R R**2 R' R'**2)
 def expandMotionParameters(par_file):
@@ -507,12 +528,29 @@ def plotMotionMetrics(fd_metrics_file, dvars_metrics_file):
 # PIPELINE CREATION
 # ******************************************************************************
 
-def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjectID, testmode=False, saveIntermediates=False):
+def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjectID, testmode=False, saveIntermediates=False, patient_anat_path=None):
     #creates a pipeline
     preproc = pe.Workflow(name='preproc')
 
+
     #the input node, which takes the input image from infosource and feeds it into the rest of the pipeline
-    input_node = pe.Node(interface=util.IdentityInterface(fields=['func']),name='input')
+    if patient_anat_path is None:
+        input_node = pe.Node(interface=util.IdentityInterface(fields=['func']),name='input')
+    else:
+        #add prep for anat imaging, reg, and xfm handled later together after func preproc nodes setup
+        input_node = pe.Node(interface=util.IdentityInterface(fields=['anat',
+                                                                      'func']),
+                             name='input')
+        input_node.inputs.anat = patient_anat_path
+
+        anat_reorient2std_node = pe.Node(interface=fsl.Reorient2Std(), name='anat_reorient2std')
+        preproc.connect(input_node, 'anat', anat_reorient2std_node, 'in_file')
+
+        anat_brain_extract_node = pe.Node(interface=fsl.BET(frac=0.45, mask=True, robust=True), name='anat_bet')
+        preproc.connect(anat_reorient2std_node, 'out_file', anat_brain_extract_node, 'in_file')
+
+        anat_apply_bet_node = pe.Node(interface=fsl.BinaryMaths(operation='mul'), name='anat_apply_bet')
+        preproc.connect(anat_brain_extract_node, 'mask_file', anat_apply_bet_node, 'operand_file')
     input_node.inputs.func = patient_func_path    
 
 
@@ -562,7 +600,6 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
     brain_extract = pe.Node(interface=fsl.BET(frac=0.45, mask=True, robust=True), name='bet')
     # functional=True,
     preproc.connect(fslroi_node_2, 'roi_file', brain_extract, 'in_file')
-
 
     #the apply bet node multiplies the brain mask to the entire BOLD image to apply the brain extraction
     apply_bet = pe.Node(interface=fsl.BinaryMaths(operation = 'mul'), name = 'bet_apply')
@@ -638,41 +675,63 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
 
 
     # ants for both linear and nonlinear registration
-    antsReg = pe.Node(interface=ants.Registration(), name='antsRegistration')
-    antsReg.inputs.transforms = ['Affine', 'SyN']
-    antsReg.inputs.transform_parameters = [(2.0,), (0.25, 3.0, 0.0)]
-    antsReg.inputs.number_of_iterations = [[1500, 200], [100, 50, 30]]
-    if testmode==True:
-        antsReg.inputs.number_of_iterations = [[5, 5], [5, 5, 5]]
-    antsReg.inputs.dimension = 3
-    antsReg.inputs.write_composite_transform = False
-    antsReg.inputs.collapse_output_transforms = False
-    antsReg.inputs.initialize_transforms_per_stage = False
-    antsReg.inputs.metric = ['Mattes']*2
-    antsReg.inputs.metric_weight = [1]*2 # Default (value ignored currently by ANTs)
-    antsReg.inputs.radius_or_number_of_bins = [32]*2
-    antsReg.inputs.sampling_strategy = ['Random', None]
-    antsReg.inputs.sampling_percentage = [0.05, None]
-    antsReg.inputs.convergence_threshold = [1.e-8, 1.e-9]
-    antsReg.inputs.convergence_window_size = [20]*2
-    antsReg.inputs.smoothing_sigmas = [[1,0], [2,1,0]]
-    antsReg.inputs.sigma_units = ['vox'] * 2
-    antsReg.inputs.shrink_factors = [[2,1], [3,2,1]]
-    antsReg.inputs.use_histogram_matching = [True, True] # This is the default
-    antsReg.inputs.output_warped_image = 'output_warped_image.nii.gz'
+    def setRegParams(node, testmode):
+        node.inputs.transforms = ['Affine', 'SyN']
+        node.inputs.transform_parameters = [(2.0,), (0.25, 3.0, 0.0)]
+        node.inputs.number_of_iterations = [[1500, 200], [100, 50, 30]]
+        if testmode:
+            node.inputs.number_of_iterations = [[5, 5], [5, 5, 5]]
+        node.inputs.dimension = 3
+        node.inputs.collapse_output_transforms = False
+        node.inputs.initialize_transforms_per_stage = False
+        node.inputs.metric = ['Mattes']*2
+        node.inputs.metric_weight = [1]*2 # Default (value ignored currently by ANTs)
+        node.inputs.radius_or_number_of_bins = [32]*2
+        node.inputs.sampling_strategy = ['Random', None]
+        node.inputs.sampling_percentage = [0.05, None]
+        node.inputs.convergence_threshold = [1.e-8, 1.e-9]
+        node.inputs.convergence_window_size = [20]*2
+        node.inputs.smoothing_sigmas = [[1,0], [2,1,0]]
+        node.inputs.sigma_units = ['vox'] * 2
+        node.inputs.shrink_factors = [[2,1], [3,2,1]]
+        node.inputs.use_histogram_matching = [True, True] # This is the default
+        node.inputs.output_warped_image = 'output_warped_image.nii.gz'
 
-    preproc.connect(template_feed, 'template', antsReg, 'moving_image')
-    preproc.connect(fslroi_node, 'roi_file', antsReg, 'fixed_image')
-
+    # will be the same regardless of registration method
     antsAppTrfm = pe.Node(interface=ants.ApplyTransforms(), name='antsApplyTransform')
     antsAppTrfm.inputs.dimension = 3
     antsAppTrfm.inputs.interpolation = 'NearestNeighbor'
     antsAppTrfm.inputs.default_value = 0
 
-    preproc.connect(segment_feed, 'segment', antsAppTrfm, 'input_image')
-    preproc.connect(fslroi_node, 'roi_file', antsAppTrfm, 'reference_image')
-    preproc.connect(antsReg, 'reverse_forward_transforms', antsAppTrfm, 'transforms')
-    preproc.connect(antsReg, 'reverse_forward_invert_flags', antsAppTrfm, 'invert_transform_flags')
+    if patient_anat_path is None:
+        antsReg = pe.Node(interface=ants.Registration(), name='antsRegistration')
+        setRegParams(antsReg, testmode)
+        antsReg.inputs.write_composite_transform = False
+
+        preproc.connect(template_feed, 'template', antsReg, 'moving_image')
+        preproc.connect(fslroi_node, 'roi_file', antsReg, 'fixed_image')
+
+        preproc.connect(segment_feed, 'segment', antsAppTrfm, 'input_image')
+        preproc.connect(fslroi_node, 'roi_file', antsAppTrfm, 'reference_image')
+        preproc.connect(antsReg, 'reverse_forward_transforms', antsAppTrfm, 'transforms')
+        preproc.connect(antsReg, 'reverse_forward_invert_flags', antsAppTrfm, 'invert_transform_flags')
+    else:
+        func2anatReg = pe.Node(interface=ants.Registration(), name='func2anatReg')
+        setRegParams(func2anatReg, testmode)
+        func2anatReg.inputs.write_composite_transform = True
+        preproc.connect(input_node, 'anat', func2anatReg, 'fixed_image')
+        preproc.connect(fslroi_node_2, 'roi_file', func2anatReg, 'moving_image')
+
+        anat2tempReg = pe.Node(interface=ants.Registration(), name='anat2tempReg')
+        setRegParams(anat2tempReg, testmode)
+        anat2tempReg.inputs.write_composite_transform = True
+        preproc.connect(template_feed, 'template', anat2tempReg, 'fixed_image')
+        preproc.connect(input_node, 'anat', anat2tempReg, 'moving_image')
+
+        temp2func_xfm_merge_node = pe.Node(interface=util.Merge(2), name='xfm_merge')
+        preproc.connect(func2anatReg, 'inverse_composite_transform', temp2func_xfm_merge_node, 'in1')
+        preproc.connect(anat2tempReg, 'inverse_composite_transform', temp2func_xfm_merge_node, 'in2')
+        preproc.connect(temp2func_xfm_merge_node, 'out', antsAppTrfm, 'transforms')
 
     rename_node = pe.Node(interface=util.Rename(), name='Rename')
     rename_node.inputs.keep_ext = True
@@ -687,16 +746,28 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
     preproc.connect(GetMaxROI_node, 'max_roi', CalcSimMatrix_node, 'maxSegVal')
     preproc.connect(merge, 'merged_file', CalcSimMatrix_node, 'bold_path')
     preproc.connect(antsAppTrfm, 'output_image', CalcSimMatrix_node, 'template_path') # FSL Registation implementation
+
+    # calculate the segmented snr
+    CalcTSNR_node = pe.Node(interface=util.Function(input_names=['bold_path', 'template_path', 'maxSegVal'], output_names=['avg_arr_file', 'std_arr_file', 'tsnr_arr_file'], function=CalcTSNR), name='CalcTSNR')
+    preproc.connect(GetMaxROI_node, 'max_roi', CalcTSNR_node, 'maxSegVal')
+    preproc.connect(merge, 'merged_file', CalcTSNR_node, 'bold_path')
+    preproc.connect(antsAppTrfm, 'output_image', CalcTSNR_node, 'template_path') # FSL Registation implementation
     
 
     # Should always be outputted
     preproc.connect(reorient2std_node, 'out_file', datasink, '{}.@reorient'.format(DATASINK_PREFIX))
     preproc.connect(apply_bet, 'out_file', datasink, DATASINK_PREFIX+'.@applybe_out')
     preproc.connect(bestRef_node, 'bestFramesFile', datasink, '{}.@bestFramesFile'.format(DATASINK_PREFIX))
-    preproc.connect(antsReg, 'warped_image', datasink, '{}.@warpedTemplate'.format(DATASINK_PREFIX))
+    if patient_anat_path is None:
+        preproc.connect(antsReg, 'warped_image', datasink, '{}.@warpedTemplate'.format(DATASINK_PREFIX))
+    else:
+        preproc.connect(func2anatReg, 'warped_image', datasink, '{}.@warpedFunc'.format(DATASINK_PREFIX))
+        preproc.connect(anat2tempReg, 'warped_image', datasink, '{}.@warpedAnat'.format(DATASINK_PREFIX))
     preproc.connect(antsAppTrfm, 'output_image', datasink, '{}.@warpedAtlas'.format(DATASINK_PREFIX))
     preproc.connect(CalcSimMatrix_node, 'avg_arr_file', datasink, DATASINK_PREFIX+'.@avgBoldSigPerRegion')
     preproc.connect(CalcSimMatrix_node, 'sim_matrix_file', datasink, DATASINK_PREFIX+'.@similarityMatrix')
+    preproc.connect(CalcTSNR_node, 'std_arr_file', datasink, DATASINK_PREFIX+'.@stdBoldSigPerRegion')
+    preproc.connect(CalcTSNR_node, 'tsnr_arr_file', datasink, DATASINK_PREFIX+'.@tsnrPerRegion')
     preproc.connect(plotmotionmetrics_node, 'outfile_path', datasink, DATASINK_PREFIX+'.@fdvsdvars_plot')
     preproc.connect(rename_node, 'out_file',datasink, DATASINK_PREFIX+'.@final_out')
     preproc.connect(artifact_extract, 'rejectionsFile', datasink, DATASINK_PREFIX+'.@rejects_summ')
@@ -713,9 +784,10 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
         preproc.connect(brain_extract, 'out_file', datasink, DATASINK_PREFIX+'.@be_out')
         preproc.connect(normalization_node, 'out_file', datasink, DATASINK_PREFIX+'.@normalization')
         preproc.connect(merge, 'merged_file', datasink, DATASINK_PREFIX+'.@merge_out')
-        preproc.connect(bias_correct, 'bias_field', datasink, DATASINK_PREFIX+'.@bias')
+        #not sure what happened to these bias nodes
+        #preproc.connect(bias_correct, 'bias_field', datasink, DATASINK_PREFIX+'.@bias')
         preproc.connect(regressNode, 'out_file', datasink, DATASINK_PREFIX+'.@residual_out')
-        preproc.connect(apply_bias, 'out_file', datasink, DATASINK_PREFIX+'.@appbias_out')
+        #preproc.connect(apply_bias, 'out_file', datasink, DATASINK_PREFIX+'.@appbias_out')
         preproc.connect(band_pass, 'out_file', datasink, DATASINK_PREFIX+'.@bandpass_out')
         preproc.connect(smooth, 'smoothed_file', datasink, DATASINK_PREFIX+'.@smooth_out')
         preproc.connect(antsAppTrfm, 'out_file', datasink, DATASINK_PREFIX+'.@app_nlin_out')
@@ -753,11 +825,18 @@ def main():
                 raise Exception("Your data is sorted into sessions but you did not indicate a session to process. Please provide the Session.")
 
     if session != None:
+        patient_anat_dir = os.path.join(data_dir, args.subject_id[0], args.session_id[0], 'anat')
         patient_func_dir = os.path.join(data_dir, args.subject_id[0], args.session_id[0], DATATYPE_SUBJECT_DIR)
     else:
+        patient_anat_dir = os.path.join(data_dir, args.subject_id[0], 'anat')
         patient_func_dir = os.path.join(data_dir, args.subject_id[0], DATATYPE_SUBJECT_DIR)
 
-
+    patient_anat_paths = []
+    for i in os.listdir(patient_anat_dir):
+        if i[-10:] == 'T1w.nii.gz':
+            patient_anat_paths.append(os.path.join(patient_anat_dir, i))
+        elif i[-7:] == 'T1w.nii':
+            patient_anat_paths.append(os.path.join(patient_anat_dir, i))
     patient_func_paths = []
     for i in os.listdir(patient_func_dir):
         if i[-11:] =='{}.nii.gz'.format(DATATYPE_FILE_SUFFIX):
@@ -771,7 +850,14 @@ def main():
         for bold_path in patient_func_paths:
             filename_noext = os.path.basename(bold_path).split('.')[0]
             outDir = makeOutDir(outDirName, args, enforceBIDS)
-            preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], args.testmode, args.saveIntermediates)
+            if patient_anat_paths:
+                preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], args.testmode, args.saveIntermediates)
+            else:
+                template_path = vetArgNone(args.template,
+                                           '/app/Template/MNI152_T1_1mm.nii.gz')  # path in docker container
+                segment_path = vetArgNone(args.segment, '/app/Template/AAL3v1_1mm.nii.gz')  # path in docker container
+                preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0],
+                                        args.testmode, args.saveIntermediates, patient_anat_paths[0])
             # preproc.write_graph(graph2use='exec', format='svg')
             tic = time.time()
             preproc.run()
