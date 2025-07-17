@@ -25,7 +25,6 @@ import time
 DATATYPE_SUBJECT_DIR = 'func'
 DATATYPE_FILE_SUFFIX = 'bold' 
 SAVE_INTERMEDIATES = True
-scheduleTXT   = '/app/Template/sched.txt'
 
 
 def makeParser():
@@ -528,7 +527,7 @@ def plotMotionMetrics(fd_metrics_file, dvars_metrics_file):
 # PIPELINE CREATION
 # ******************************************************************************
 
-def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjectID, testmode=False, saveIntermediates=False, patient_anat_path=None):
+def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjectID, scheduleTXT, testmode=False, saveIntermediates=False, patient_anat_path=None):
     #creates a pipeline
     preproc = pe.Workflow(name='preproc')
 
@@ -814,6 +813,7 @@ def main():
     session       = vetArgNone(args.session_id, None)
     template_path = vetArgNone(args.template, '/app/Template/MNI152lin_T1_4mm_brain.nii.gz') #path in docker container
     segment_path  = vetArgNone(args.segment, '/app/Template/aal2.nii.gz') #path in docker container
+    scheduleTXT = vetArgNone(args.scheduleTXT, '/app/Template/sched.txt') #path in docker container
     enforceBIDS   = True
 
     if args.testmode:
@@ -851,12 +851,12 @@ def main():
             filename_noext = os.path.basename(bold_path).split('.')[0]
             outDir = makeOutDir(outDirName, args, enforceBIDS)
             if patient_anat_paths:
-                preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], args.testmode, args.saveIntermediates)
+                preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], scheduleTXT, args.testmode, args.saveIntermediates)
             else:
                 template_path = vetArgNone(args.template,
                                            '/app/Template/MNI152_T1_1mm.nii.gz')  # path in docker container
                 segment_path = vetArgNone(args.segment, '/app/Template/AAL3v1_1mm.nii.gz')  # path in docker container
-                preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0],
+                preproc = buildWorkflow(bold_path, template_path, segment_path, outDir, args.subject_id[0], scheduleTXT,
                                         args.testmode, args.saveIntermediates, patient_anat_paths[0])
             # preproc.write_graph(graph2use='exec', format='svg')
             tic = time.time()
