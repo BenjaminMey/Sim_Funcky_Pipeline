@@ -721,6 +721,7 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
         setRegParams(func2anatReg, testmode)
         func2anatReg.inputs.write_composite_transform = True
         func2anatReg.inputs.output_warped_image = 'func2anatReg_output_warped_image.nii.gz'
+        func2anatReg.inputs.output_transform_prefix = 'func2anat_transform'
         preproc.connect(anat_apply_bet_node, 'out_file', func2anatReg, 'fixed_image')
         preproc.connect(fslroi_node, 'roi_file', func2anatReg, 'moving_image')
 
@@ -728,6 +729,7 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
         setRegParams(anat2tempReg, testmode)
         anat2tempReg.inputs.write_composite_transform = True
         anat2tempReg.inputs.output_warped_image = 'anat2tempReg_output_warped_image.nii.gz'
+        anat2tempReg.inputs.output_transform_prefix = 'anat2temp_transform'
         preproc.connect(template_feed, 'template', anat2tempReg, 'fixed_image')
         preproc.connect(anat_apply_bet_node, 'out_file', anat2tempReg, 'moving_image')
 
@@ -763,9 +765,15 @@ def buildWorkflow(patient_func_path, template_path, segment_path, outDir, subjec
     preproc.connect(bestRef_node, 'bestFramesFile', datasink, '{}.@bestFramesFile'.format(DATASINK_PREFIX))
     if patient_anat_path is None:
         preproc.connect(antsReg, 'warped_image', datasink, '{}.@warpedTemplate'.format(DATASINK_PREFIX))
+        preproc.connect(antsReg, 'composite_transform', datasink, '{}.@temp2func_compositeTransform'.format(DATASINK_PREFIX))
+        preproc.connect(antsReg, 'inverse_composite_transform', datasink, '{}.@temp2func_inversecompositeTransform'.format(DATASINK_PREFIX))
     else:
         preproc.connect(func2anatReg, 'warped_image', datasink, '{}.@warpedFunc'.format(DATASINK_PREFIX))
+        preproc.connect(func2anatReg, 'composite_transform', datasink, '{}.@func2anat_compositeTransform'.format(DATASINK_PREFIX))
+        preproc.connect(func2anatReg, 'inverse_composite_transform', datasink, '{}.@func2anat_inversecompositeTransform'.format(DATASINK_PREFIX))
         preproc.connect(anat2tempReg, 'warped_image', datasink, '{}.@warpedAnat'.format(DATASINK_PREFIX))
+        preproc.connect(anat2tempReg, 'composite_transform', datasink, '{}.@anat2temp_compositeTransform'.format(DATASINK_PREFIX))
+        preproc.connect(anat2tempReg, 'inverse_composite_transform', datasink, '{}.@anat2temp_inversecompositeTransform'.format(DATASINK_PREFIX))
     preproc.connect(antsAppTrfm, 'output_image', datasink, '{}.@warpedAtlas'.format(DATASINK_PREFIX))
     preproc.connect(CalcSimMatrix_node, 'avg_arr_file', datasink, DATASINK_PREFIX+'.@avgBoldSigPerRegion')
     preproc.connect(CalcSimMatrix_node, 'sim_matrix_file', datasink, DATASINK_PREFIX+'.@similarityMatrix')
