@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="43007b17-2ae0-496c-9c39-be8328c4db48" name="Changes" comment="output composite transforms with unique names" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="implement-mapnode-iterables" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "BenjaminMey"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/BenjaminMey/Sim_Funcky_Pipeline",
+    "accountId": "a3852345-02b1-4d75-a3c1-96347f801ce8"
+  }
+}]]></component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 8
+}]]></component>
+  <component name="ProjectId" id="300JZtW8xDCWQGBOmQW7f0xjbir" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "add__snr__calcs",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-53e2683a6804-9cdd278e9d02-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-251.26094.141" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="43007b17-2ae0-496c-9c39-be8328c4db48" name="Changes" comment="" />
+      <created>1752758615295</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1752758615295</updated>
+    </task>
+    <task id="LOCAL-00001" summary="First pass update to include snr output. Will calculate by volume and region for input segmentation">
+      <option name="closed" value="true" />
+      <created>1752772024870</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1752772024870</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Add template files for T1 registration">
+      <option name="closed" value="true" />
+      <created>1752772822881</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1752772822881</updated>
+    </task>
+    <task id="LOCAL-00003" summary="add back schedule input for easier testing">
+      <option name="closed" value="true" />
+      <created>1752772856803</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1752772856803</updated>
+    </task>
+    <task id="LOCAL-00004" summary="add back schedule input for easier testing">
+      <option name="closed" value="true" />
+      <created>1752773735268</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1752773735268</updated>
+    </task>
+    <task id="LOCAL-00005" summary="add back schedule input for easier testing">
+      <option name="closed" value="true" />
+      <created>1752773827923</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1752773827923</updated>
+    </task>
+    <task id="LOCAL-00006" summary="add unique warped image names">
+      <option name="closed" value="true" />
+      <created>1752775794981</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1752775794981</updated>
+    </task>
+    <task id="LOCAL-00007" summary="skull strip before registration in either case">
+      <option name="closed" value="true" />
+      <created>1752776374100</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1752776374100</updated>
+    </task>
+    <task id="LOCAL-00008" summary="reverse conditional for whether T1 is present">
+      <option name="closed" value="true" />
+      <created>1752777232272</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1752777232272</updated>
+    </task>
+    <task id="LOCAL-00009" summary="add anat_apply_bet_node in_file, correct target nifti path">
+      <option name="closed" value="true" />
+      <created>1752777668970</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1752777668970</updated>
+    </task>
+    <task id="LOCAL-00010" summary="add apply transform input_image, reference_file for multi-part registration">
+      <option name="closed" value="true" />
+      <created>1752778949526</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1752778949526</updated>
+    </task>
+    <task id="LOCAL-00011" summary="move preproc folder out of tmp to cwd">
+      <option name="closed" value="true" />
+      <created>1752780556964</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1752780556964</updated>
+    </task>
+    <task id="LOCAL-00012" summary="IN PROGRESS rearranging direct references to calculated directories, implementing iterables or mapnode for makeOutDir, reorient2std, sinker as necessary">
+      <option name="closed" value="true" />
+      <created>1752785392186</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1752785392186</updated>
+    </task>
+    <task id="LOCAL-00013" summary="output composite transforms with unique names">
+      <option name="closed" value="true" />
+      <created>1752790406922</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1752790406922</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
+    <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="First pass update to include snr output. Will calculate by volume and region for input segmentation" />
+    <MESSAGE value="Add template files for T1 registration" />
+    <MESSAGE value="add back schedule input for easier testing" />
+    <MESSAGE value="add unique warped image names" />
+    <MESSAGE value="skull strip before registration in either case" />
+    <MESSAGE value="reverse conditional for whether T1 is present" />
+    <MESSAGE value="add anat_apply_bet_node in_file, correct target nifti path" />
+    <MESSAGE value="add apply transform input_image, reference_file for multi-part registration" />
+    <MESSAGE value="move preproc folder out of tmp to cwd" />
+    <MESSAGE value="IN PROGRESS rearranging direct references to calculated directories, implementing iterables or mapnode for makeOutDir, reorient2std, sinker as necessary" />
+    <MESSAGE value="output composite transforms with unique names" />
+    <option name="LAST_COMMIT_MESSAGE" value="output composite transforms with unique names" />
+  </component>
+</project>
